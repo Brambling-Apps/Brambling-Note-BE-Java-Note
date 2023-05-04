@@ -115,8 +115,8 @@ public class Controller {
                     }
 
                     n.setImportance(note.isImportance());
-                    Note newNote = repository.save(n);
-                    return toNoteForReturn(newNote, user);
+                    Note savedNote = repository.save(n);
+                    return toNoteForReturn(savedNote, user);
                 }
                 throw new ResponseStatusException(
                         HttpStatusCode.valueOf(401),
