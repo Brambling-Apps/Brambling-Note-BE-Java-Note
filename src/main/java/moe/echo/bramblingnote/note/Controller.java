@@ -1,7 +1,7 @@
 package moe.echo.bramblingnote.note;
 
 import jakarta.servlet.http.HttpSession;
-import moe.echo.bramblingnote.user.UserForSession;
+import moe.echo.bramblingnote.user.UserForReturn;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +17,7 @@ public class Controller {
     @Autowired
     private Repository repository;
 
-    private NoteForReturn toNoteForReturn(Note note, UserForSession user) {
+    private NoteForReturn toNoteForReturn(Note note, UserForReturn user) {
         NoteForReturn n = new NoteForReturn();
         n.setId(note.getId());
         n.setContent(note.getContent());
@@ -36,7 +36,7 @@ public class Controller {
     @PostMapping("/")
     public NoteForReturn create(@RequestBody NewNote note, HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForSession user) {
+        if (rawUser instanceof UserForReturn user) {
             Note n = new Note();
             n.setContent(note.getContent());
             n.setImportance(note.isImportance());
@@ -52,7 +52,7 @@ public class Controller {
     @DeleteMapping("/{id}")
     public ResponseEntity<Object> delete(@PathVariable UUID id, HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForSession user) {
+        if (rawUser instanceof UserForReturn user) {
             return repository.findById(id).map(note -> {
                 if (user.getId().equals(note.getUserId())) {
                     repository.deleteById(id);
@@ -74,7 +74,7 @@ public class Controller {
     @GetMapping("/")
     public List<NoteForReturn> get(HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForSession user) {
+        if (rawUser instanceof UserForReturn user) {
             return repository.findAllByUserId(user.getId()).stream()
                     .map(note -> toNoteForReturn(note, user))
                     .toList();
@@ -85,7 +85,7 @@ public class Controller {
     @GetMapping("/{id}")
     public NoteForReturn getById(@PathVariable UUID id, HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForSession user) {
+        if (rawUser instanceof UserForReturn user) {
             return repository.findById(id).map(n -> {
                 if (n.getUserId().equals(user.getId())) {
                     return toNoteForReturn(n, user);
@@ -106,7 +106,7 @@ public class Controller {
     @PutMapping("/{id}")
     public NoteForReturn update(@PathVariable UUID id, @RequestBody NewNote note, HttpSession session) {
         Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForSession user) {
+        if (rawUser instanceof UserForReturn user) {
             return repository.findById(id).map(n -> {
                 if (n.getUserId().equals(user.getId())) {
                     String content = note.getContent();

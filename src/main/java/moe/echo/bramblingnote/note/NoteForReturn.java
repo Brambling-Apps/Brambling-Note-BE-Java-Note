@@ -2,7 +2,7 @@ package moe.echo.bramblingnote.note;
 
 import lombok.Getter;
 import lombok.Setter;
-import moe.echo.bramblingnote.user.UserForSession;
+import moe.echo.bramblingnote.user.UserForReturn;
 
 import java.util.Date;
 import java.util.UUID;
@@ -20,5 +20,5 @@ public class NoteForReturn {
 
     private Date expireAt;
 
-    private UserForSession user;
+    private UserForReturn user;
 }
