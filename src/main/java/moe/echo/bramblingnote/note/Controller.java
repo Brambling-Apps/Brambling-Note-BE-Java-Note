@@ -4,7 +4,6 @@ import jakarta.servlet.http.HttpSession;
 import moe.echo.bramblingnote.user.UserForReturn;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -29,8 +28,10 @@ public class Controller {
     }
 
     @GetMapping("/health")
-    public ResponseEntity<Object> health() {
-        return ResponseEntity.ok().build();
+    public MessageJson health() {
+        MessageJson message = new MessageJson();
+        message.setMessage("ok");
+        return message;
     }
 
     @PostMapping("/")
@@ -50,13 +51,16 @@ public class Controller {
 
     // TODO: expireAt
     @DeleteMapping("/{id}")
-    public ResponseEntity<Object> delete(@PathVariable UUID id, HttpSession session) {
+    public MessageJson delete(@PathVariable UUID id, HttpSession session) {
         Object rawUser = session.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             return repository.findById(id).map(note -> {
                 if (user.getId().equals(note.getUserId())) {
                     repository.deleteById(id);
-                    return ResponseEntity.ok().build();
+
+                    MessageJson message = new MessageJson();
+                    message.setMessage("ok");
+                    return message;
                 }
 
                 throw new ResponseStatusException(
