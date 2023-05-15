@@ -3,6 +3,7 @@ package moe.echo.bramblingnote.note;
 import jakarta.servlet.http.HttpSession;
 import moe.echo.bramblingnote.user.UserForReturn;
 import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -13,9 +14,11 @@ import java.util.UUID;
 @RestController
 public class Controller {
     private final Repository repository;
+    private final HttpSession session;
 
-    Controller(Repository repository) {
+    Controller(Repository repository, HttpSession session) {
         this.repository = repository;
+        this.session = session;
     }
 
     private NoteForReturn toNoteForReturn(Note note, UserForReturn user) {
@@ -37,7 +40,7 @@ public class Controller {
     }
 
     @PostMapping("/")
-    public NoteForReturn create(@RequestBody NewNote note, HttpSession session) {
+    public NoteForReturn create(@RequestBody NewNote note) {
         Object rawUser = session.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             Note n = new Note();
@@ -53,12 +56,11 @@ public class Controller {
 
     // TODO: expireAt
     @DeleteMapping("/{id}")
-    public MessageJson delete(@PathVariable UUID id, HttpSession session) {
+    public MessageJson delete(@PathVariable UUID id) {
         Object rawUser = session.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             return repository.findById(id).map(note -> {
                 if (user.getId().equals(note.getUserId())) {
-                    repository.deleteById(id);
 
                     MessageJson message = new MessageJson();
                     message.setMessage("ok");
@@ -78,7 +80,7 @@ public class Controller {
     }
 
     @GetMapping("/")
-    public List<NoteForReturn> get(HttpSession session) {
+    public List<NoteForReturn> get() {
         Object rawUser = session.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             return repository.findAllByUserId(user.getId()).stream()
@@ -89,7 +91,7 @@ public class Controller {
     }
 
     @GetMapping("/{id}")
-    public NoteForReturn getById(@PathVariable UUID id, HttpSession session) {
+    public NoteForReturn getById(@PathVariable UUID id) {
         Object rawUser = session.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             return repository.findById(id).map(n -> {
@@ -110,7 +112,7 @@ public class Controller {
     }
 
     @PutMapping("/{id}")
-    public NoteForReturn update(@PathVariable UUID id, @RequestBody NewNote note, HttpSession session) {
+    public NoteForReturn update(@PathVariable UUID id, @RequestBody NewNote note) {
         Object rawUser = session.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             return repository.findById(id).map(n -> {
