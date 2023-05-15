@@ -2,7 +2,6 @@ package moe.echo.bramblingnote.note;
 
 import jakarta.servlet.http.HttpSession;
 import moe.echo.bramblingnote.user.UserForReturn;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -13,8 +12,11 @@ import java.util.UUID;
 
 @RestController
 public class Controller {
-    @Autowired
-    private Repository repository;
+    private final Repository repository;
+
+    Controller(Repository repository) {
+        this.repository = repository;
+    }
 
     private NoteForReturn toNoteForReturn(Note note, UserForReturn user) {
         NoteForReturn n = new NoteForReturn();
