@@ -21,3 +21,6 @@ spring:
   #    show-sql: true
   datasource:
     driver-class-name: org.postgresql.Driver
+  kafka:
+    consumer:
+      auto-offset-reset: earliest

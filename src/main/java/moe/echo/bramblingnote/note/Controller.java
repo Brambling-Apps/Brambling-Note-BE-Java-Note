@@ -2,8 +2,13 @@ package moe.echo.bramblingnote.note;
 
 import jakarta.servlet.http.HttpSession;
 import moe.echo.bramblingnote.user.UserForReturn;
+import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.config.TopicBuilder;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -15,10 +20,12 @@ import java.util.UUID;
 public class Controller {
     private final Repository repository;
     private final HttpSession session;
+    private final KafkaTemplate<String, UUID> template;
 
-    Controller(Repository repository, HttpSession session) {
+    Controller(Repository repository, HttpSession session, KafkaTemplate<String, UUID> template) {
         this.repository = repository;
         this.session = session;
+        this.template = template;
     }
 
     private NoteForReturn toNoteForReturn(Note note, UserForReturn user) {
@@ -30,6 +37,19 @@ public class Controller {
         n.setExpireAt(note.getExpireAt());
         n.setUser(user);
         return n;
+    }
+
+    @Bean
+    public NewTopic topic() {
+        return TopicBuilder.name("delete-note")
+                .partitions(10)
+                .replicas(1)
+                .build();
+    }
+
+    @KafkaListener(id = "eraser", topics = "delete-note")
+    public void listen(UUID id) {
+        repository.deleteById(id);
     }
 
     @GetMapping("/health")
@@ -56,15 +76,16 @@ public class Controller {
 
     // TODO: expireAt
     @DeleteMapping("/{id}")
-    public MessageJson delete(@PathVariable UUID id) {
+    public ResponseEntity<MessageJson> delete(@PathVariable UUID id) {
         Object rawUser = session.getAttribute("user");
         if (rawUser instanceof UserForReturn user) {
             return repository.findById(id).map(note -> {
                 if (user.getId().equals(note.getUserId())) {
+                    template.send("delete-note", id);
 
                     MessageJson message = new MessageJson();
                     message.setMessage("ok");
-                    return message;
+                    return ResponseEntity.status(202).body(message);
                 }
 
                 throw new ResponseStatusException(
