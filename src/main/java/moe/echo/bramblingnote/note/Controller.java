@@ -145,10 +145,7 @@ public class Controller {
         UserForReturn user = getUser(session);
 
         Note note = getNote(id, user.getId());
-        String content = newNote.getContent();
-        if (content != null) {
-            note.setContent(content);
-        }
+        note.setContent(newNote.getContent());
         note.setImportance(newNote.isImportance());
 
         return toNoteForReturn(service.save(note), user);
