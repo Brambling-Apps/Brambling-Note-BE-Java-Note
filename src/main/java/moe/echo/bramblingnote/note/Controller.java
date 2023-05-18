@@ -39,6 +39,22 @@ public class Controller {
         return n;
     }
 
+    private UserForReturn getUser(HttpSession session) throws ResponseStatusException {
+        Object rawUser = session.getAttribute("user");
+        if (!(rawUser instanceof UserForReturn user)) {
+            throw new ResponseStatusException(HttpStatusCode.valueOf(401), "You are not login yet");
+        }
+
+        return user;
+    }
+
+    private Note getNote(UUID id) throws ResponseStatusException {
+        return repository.findById(id).orElseThrow(() -> new ResponseStatusException(
+                HttpStatusCode.valueOf(404),
+                "Note `" + id + "` not found"
+        ));
+    }
+
     @Bean
     public NewTopic topic() {
         return TopicBuilder.name("delete-note")
@@ -61,102 +77,58 @@ public class Controller {
 
     @PostMapping("/")
     public NoteForReturn create(@RequestBody NewNote note) {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            Note n = new Note();
-            n.setContent(note.getContent());
-            n.setImportance(note.isImportance());
-            n.setDate(new Date());
-            n.setExpireAt(null);
-            n.setUserId(user.getId());
-            return toNoteForReturn(repository.save(n), user);
-        }
-        throw new ResponseStatusException(HttpStatusCode.valueOf(401), "You are not login yet");
+        UserForReturn user = getUser(session);
+
+        Note n = new Note();
+        n.setContent(note.getContent());
+        n.setImportance(note.isImportance());
+        n.setDate(new Date());
+        n.setExpireAt(null);
+        n.setUserId(user.getId());
+        return toNoteForReturn(repository.save(n), user);
     }
 
     // TODO: expireAt
     @DeleteMapping("/{id}")
     public ResponseEntity<MessageJson> delete(@PathVariable UUID id) {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            return repository.findById(id).map(note -> {
-                if (user.getId().equals(note.getUserId())) {
-                    template.send("delete-note", id);
+        UserForReturn user = getUser(session);
+        getNote(id);
 
-                    MessageJson message = new MessageJson();
-                    message.setMessage("ok");
-                    return ResponseEntity.status(202).body(message);
-                }
+        template.send("delete-note", id);
 
-                throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(401),
-                        "You have no permission to access this note"
-                );
-            }).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatusCode.valueOf(404),
-                    "Note `" + id + "` not found")
-            );
-        }
-        throw new ResponseStatusException(HttpStatusCode.valueOf(401), "You are not login yet");
+        MessageJson message = new MessageJson();
+        message.setMessage("ok");
+        return ResponseEntity.status(202).body(message);
     }
 
     @GetMapping("/")
     public List<NoteForReturn> get() {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            return repository.findAllByUserId(user.getId()).stream()
-                    .map(note -> toNoteForReturn(note, user))
-                    .toList();
-        }
-        throw new ResponseStatusException(HttpStatusCode.valueOf(401), "You are not login yet");
+        UserForReturn user = getUser(session);
+
+        return repository.findAllByUserId(user.getId()).stream()
+                .map(note -> toNoteForReturn(note, user))
+                .toList();
     }
 
     @GetMapping("/{id}")
     public NoteForReturn getById(@PathVariable UUID id) {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            return repository.findById(id).map(n -> {
-                if (n.getUserId().equals(user.getId())) {
-                    return toNoteForReturn(n, user);
-                }
-                throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(401),
-                        "You have no permission to note `" + id + "`"
-                );
-            }).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatusCode.valueOf(404),
-                    "note `" + id + "` not found"
-            ));
-        }
+        UserForReturn user = getUser(session);
+        Note note = getNote(id);
 
-        throw new ResponseStatusException(HttpStatusCode.valueOf(401), "You are not login yet");
+        return toNoteForReturn(note, user);
     }
 
     @PutMapping("/{id}")
-    public NoteForReturn update(@PathVariable UUID id, @RequestBody NewNote note) {
-        Object rawUser = session.getAttribute("user");
-        if (rawUser instanceof UserForReturn user) {
-            return repository.findById(id).map(n -> {
-                if (n.getUserId().equals(user.getId())) {
-                    String content = note.getContent();
-                    if (content != null) {
-                        n.setContent(note.getContent());
-                    }
+    public NoteForReturn update(@PathVariable UUID id, @RequestBody NewNote newNote) {
+        UserForReturn user = getUser(session);
 
-                    n.setImportance(note.isImportance());
-                    Note savedNote = repository.save(n);
-                    return toNoteForReturn(savedNote, user);
-                }
-                throw new ResponseStatusException(
-                        HttpStatusCode.valueOf(401),
-                        "You have no permission to note `" + id + "`"
-                );
-            }).orElseThrow(() -> new ResponseStatusException(
-                    HttpStatusCode.valueOf(404),
-                    "note `" + id + "` not found"
-            ));
+        Note note = getNote(id);
+        String content = newNote.getContent();
+        if (content != null) {
+            note.setContent(content);
         }
+        note.setImportance(newNote.isImportance());
 
-        throw new ResponseStatusException(HttpStatusCode.valueOf(401), "You are not login yet");
+        return toNoteForReturn(repository.save(note), user);
     }
 }
