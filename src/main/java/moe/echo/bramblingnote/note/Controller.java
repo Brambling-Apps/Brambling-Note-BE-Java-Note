@@ -20,12 +20,12 @@ import java.util.UUID;
 
 @RestController
 public class Controller {
-    private final Repository repository;
+    private final ServiceImpl service;
     private final HttpSession session;
     private final KafkaTemplate<String, String> template;
 
-    Controller(Repository repository, HttpSession session, KafkaTemplate<String, String> template) {
-        this.repository = repository;
+    Controller(ServiceImpl service, HttpSession session, KafkaTemplate<String, String> template) {
+        this.service = service;
         this.session = session;
         this.template = template;
     }
@@ -50,11 +50,17 @@ public class Controller {
         return user;
     }
 
-    private Note getNote(UUID id) throws ResponseStatusException {
-        return repository.findById(id).orElseThrow(() -> new ResponseStatusException(
-                HttpStatusCode.valueOf(404),
-                "Note `" + id + "` not found"
-        ));
+    private Note getNote(UUID id, UUID userId) throws ResponseStatusException {
+        Note note = service.findById(id, userId);
+
+        if (note == null) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(404),
+                    "Note `" + id + "` not found"
+            );
+        }
+
+        return note;
     }
 
     @Bean
@@ -66,8 +72,8 @@ public class Controller {
     }
 
     @KafkaListener(id = "eraser", topics = "delete-note")
-    public void listen(@Header(KafkaHeaders.RECEIVED_KEY) String id) {
-        repository.deleteById(UUID.fromString(id));
+    public void listen(@Header(KafkaHeaders.RECEIVED_KEY) String id, String userId) {
+        service.undoableDeleteById(UUID.fromString(id), UUID.fromString(userId));
     }
 
     @GetMapping("/health")
@@ -87,35 +93,49 @@ public class Controller {
         n.setDate(new Date());
         n.setExpireAt(null);
         n.setUserId(user.getId());
-        return toNoteForReturn(repository.save(n), user);
+        return toNoteForReturn(service.save(n), user);
     }
 
-    // TODO: expireAt
     @DeleteMapping("/{id}")
     public ResponseEntity<MessageJson> delete(@PathVariable UUID id) {
         UserForReturn user = getUser(session);
-        getNote(id);
+        getNote(id, user.getId());
 
-        template.send("delete-note", id.toString());
+        template.send("delete-note", id.toString(), user.getId().toString());
 
         MessageJson message = new MessageJson();
         message.setMessage("ok");
         return ResponseEntity.status(202).body(message);
     }
 
+    @PatchMapping("/deleted/{id}")
+    public NoteForReturn undoDelete(@PathVariable UUID id) {
+        UserForReturn user = getUser(session);
+        Note note = service.undoDeleteById(id, user.getId());
+
+        if (note == null) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(404),
+                    "Note `" + id + "` is already gone."
+            );
+        }
+
+        return toNoteForReturn(note, user);
+    }
+
     @GetMapping("/")
-    public List<NoteForReturn> get() {
+    public List<NoteForReturn> getAll() {
         UserForReturn user = getUser(session);
 
-        return repository.findAllByUserId(user.getId()).stream()
+        return service.findAllByUserId(user.getId()).stream()
                 .map(note -> toNoteForReturn(note, user))
                 .toList();
     }
 
     @GetMapping("/{id}")
-    public NoteForReturn getById(@PathVariable UUID id) {
+    public NoteForReturn get(@PathVariable UUID id) {
         UserForReturn user = getUser(session);
-        Note note = getNote(id);
+        Note note = getNote(id, user.getId());
 
         return toNoteForReturn(note, user);
     }
@@ -124,13 +144,13 @@ public class Controller {
     public NoteForReturn update(@PathVariable UUID id, @RequestBody NewNote newNote) {
         UserForReturn user = getUser(session);
 
-        Note note = getNote(id);
+        Note note = getNote(id, user.getId());
         String content = newNote.getContent();
         if (content != null) {
             note.setContent(content);
         }
         note.setImportance(newNote.isImportance());
 
-        return toNoteForReturn(repository.save(note), user);
+        return toNoteForReturn(service.save(note), user);
     }
 }
