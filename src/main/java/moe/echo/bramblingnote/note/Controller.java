@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -20,9 +22,9 @@ import java.util.UUID;
 public class Controller {
     private final Repository repository;
     private final HttpSession session;
-    private final KafkaTemplate<String, UUID> template;
+    private final KafkaTemplate<String, String> template;
 
-    Controller(Repository repository, HttpSession session, KafkaTemplate<String, UUID> template) {
+    Controller(Repository repository, HttpSession session, KafkaTemplate<String, String> template) {
         this.repository = repository;
         this.session = session;
         this.template = template;
@@ -64,8 +66,8 @@ public class Controller {
     }
 
     @KafkaListener(id = "eraser", topics = "delete-note")
-    public void listen(UUID id) {
-        repository.deleteById(id);
+    public void listen(@Header(KafkaHeaders.RECEIVED_KEY) String id) {
+        repository.deleteById(UUID.fromString(id));
     }
 
     @GetMapping("/health")
@@ -94,7 +96,7 @@ public class Controller {
         UserForReturn user = getUser(session);
         getNote(id);
 
-        template.send("delete-note", id);
+        template.send("delete-note", id.toString());
 
         MessageJson message = new MessageJson();
         message.setMessage("ok");
