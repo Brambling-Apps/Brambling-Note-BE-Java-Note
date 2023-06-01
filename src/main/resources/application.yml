@@ -1,8 +1,6 @@
 spring:
   application:
     name: brambling-note-note
-  config:
-    import: "consul:"
   cloud:
     consul:
       discovery:
