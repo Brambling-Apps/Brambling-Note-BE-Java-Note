@@ -1,11 +1,14 @@
 package moe.echo.bramblingnote.note;
 
+import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpSession;
-import moe.echo.bramblingnote.user.UserForReturn;
+import moe.echo.bramblingnote.user.UserDto;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -23,31 +26,40 @@ public class Controller {
     private final ServiceImpl service;
     private final HttpSession session;
     private final KafkaTemplate<String, String> template;
+    private final NoteMapper noteMapper;
 
-    Controller(ServiceImpl service, HttpSession session, KafkaTemplate<String, String> template) {
+    public Controller(
+            ServiceImpl service,
+            HttpSession session,
+            KafkaTemplate<String, String> template,
+            NoteMapper noteMapper
+    ) {
         this.service = service;
         this.session = session;
         this.template = template;
+        this.noteMapper = noteMapper;
     }
 
-    private NoteForReturn toNoteForReturn(Note note, UserForReturn user) {
-        NoteForReturn n = new NoteForReturn();
-        n.setId(note.getId());
-        n.setContent(note.getContent());
-        n.setDate(note.getDate());
-        n.setImportance(note.isImportance());
-        n.setExpireAt(note.getExpireAt());
-        n.setUser(user);
-        return n;
-    }
-
-    private UserForReturn getUser(HttpSession session) throws ResponseStatusException {
+    @JsonView(moe.echo.bramblingnote.user.View.ViewOnly.class)
+    private UserDto getUserFromSession() {
         Object rawUser = session.getAttribute("user");
-        if (!(rawUser instanceof UserForReturn user)) {
-            throw new ResponseStatusException(HttpStatusCode.valueOf(401), "You are not login yet");
+
+        if (!(rawUser instanceof String userJson)) {
+            session.invalidate();
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(401), "You are not login yet"
+            );
         }
 
-        return user;
+        ObjectMapper mapper = new ObjectMapper();
+
+        try {
+            return mapper.readValue(userJson, UserDto.class);
+        } catch (JsonProcessingException e) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(500), e.getMessage()
+            );
+        }
     }
 
     private Note getNote(UUID id, UUID userId) throws ResponseStatusException {
@@ -77,40 +89,36 @@ public class Controller {
     }
 
     @GetMapping("/health")
-    public MessageJson health() {
-        MessageJson message = new MessageJson();
-        message.setMessage("ok");
-        return message;
-    }
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void health() {}
 
     @PostMapping("/")
-    public NoteForReturn create(@RequestBody NewNote note) {
-        UserForReturn user = getUser(session);
+    @JsonView(View.ViewOnly.class)
+    public NoteDto create(@RequestBody @JsonView(View.Editable.class) NoteDto newNote) {
+        UserDto user = getUserFromSession();
 
-        Note n = new Note();
-        n.setContent(note.getContent());
-        n.setImportance(note.isImportance());
-        n.setDate(new Date());
-        n.setExpireAt(null);
-        n.setUserId(user.getId());
-        return toNoteForReturn(service.save(n), user);
+        NoteDto note = new NoteDto();
+        note.setContent(newNote.getContent());
+        note.setImportance(newNote.isImportance());
+        note.setDate(new Date());
+        note.setExpireAt(null);
+        note.setUser(user);
+        return noteMapper.toNoteDto(service.save(noteMapper.toNote(note)));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<MessageJson> delete(@PathVariable UUID id) {
-        UserForReturn user = getUser(session);
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id) {
+        UserDto user = getUserFromSession();
         getNote(id, user.getId());
 
         template.send("delete-note", id.toString(), user.getId().toString());
-
-        MessageJson message = new MessageJson();
-        message.setMessage("ok");
-        return ResponseEntity.status(202).body(message);
     }
 
     @PatchMapping("/deleted/{id}")
-    public NoteForReturn undoDelete(@PathVariable UUID id) {
-        UserForReturn user = getUser(session);
+    @JsonView(View.ViewOnly.class)
+    public NoteDto undoDelete(@PathVariable UUID id) {
+        UserDto user = getUserFromSession();
         Note note = service.undoDeleteById(id, user.getId());
 
         if (note == null) {
@@ -120,34 +128,48 @@ public class Controller {
             );
         }
 
-        return toNoteForReturn(note, user);
+        NoteDto noteDto = noteMapper.toNoteDto(note);
+        noteDto.setUser(user);
+
+        return noteDto;
     }
 
     @GetMapping("/")
-    public List<NoteForReturn> getAll() {
-        UserForReturn user = getUser(session);
+    @JsonView(View.ViewOnly.class)
+    public List<NoteDto> getAll() {
+        UserDto user = getUserFromSession();
 
         return service.findAllByUserId(user.getId()).stream()
-                .map(note -> toNoteForReturn(note, user))
+                .map(note -> {
+                    NoteDto noteDto = noteMapper.toNoteDto(note);
+                    noteDto.setUser(user);
+                    return noteDto;
+                })
                 .toList();
     }
 
     @GetMapping("/{id}")
-    public NoteForReturn get(@PathVariable UUID id) {
-        UserForReturn user = getUser(session);
+    @JsonView(View.ViewOnly.class)
+    public NoteDto get(@PathVariable UUID id) {
+        UserDto user = getUserFromSession();
         Note note = getNote(id, user.getId());
 
-        return toNoteForReturn(note, user);
+        NoteDto noteDto = noteMapper.toNoteDto(note);
+        noteDto.setUser(user);
+        return noteDto;
     }
 
     @PutMapping("/{id}")
-    public NoteForReturn update(@PathVariable UUID id, @RequestBody NewNote newNote) {
-        UserForReturn user = getUser(session);
+    @JsonView(View.ViewOnly.class)
+    public NoteDto update(@PathVariable UUID id, @RequestBody @JsonView(View.Editable.class) NoteDto newNote) {
+        UserDto user = getUserFromSession();
 
         Note note = getNote(id, user.getId());
         note.setContent(newNote.getContent());
         note.setImportance(newNote.isImportance());
 
-        return toNoteForReturn(service.save(note), user);
+        NoteDto noteDto = noteMapper.toNoteDto(service.save(note));
+        noteDto.setUser(user);
+        return noteDto;
     }
 }
