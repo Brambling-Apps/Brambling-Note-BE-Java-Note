@@ -72,6 +72,13 @@ public class Controller {
             );
         }
 
+        if (note.getExpireAt() != null) {
+            throw new ResponseStatusException(
+                    HttpStatusCode.valueOf(404),
+                    "Note `" + id + "` not found"
+            );
+        }
+
         return note;
     }
 
@@ -140,6 +147,7 @@ public class Controller {
         UserDto user = getUserFromSession();
 
         return service.findAllByUserId(user.getId()).stream()
+                .filter(note -> note.getExpireAt() == null)
                 .map(note -> {
                     NoteDto noteDto = noteMapper.toNoteDto(note);
                     noteDto.setUser(user);
